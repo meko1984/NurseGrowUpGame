@@ -4,25 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4fbff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>看護師道場-新人成長物語-</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <main class="game-shell">
-    <header class="status-card">
-      <div class="title-row">
-        <div class="logo" aria-hidden="true">+</div>
-        <div class="title-copy">
-          <p class="eyebrow">UNIT NURSE SIMULATION</p>
-          <h1>看護師道場<span>-新人成長物語-</span></h1>
-        </div>
+    <header class="status-header">
+      <div class="brand-line">
+        <div class="mini-logo" aria-hidden="true">+</div>
+        <h1>看護師道場 <span>-新人成長物語-</span></h1>
         <div class="shift-clock"><small>日勤</small><strong id="game-time">09:00</strong></div>
       </div>
-      <div class="status-grid">
+      <div class="compact-stats">
         <div class="level-chip"><b>Lv.1</b><span>新人ナース</span></div>
-        <div class="meter"><div><span>体力</span><b>92/100</b></div><i><em style="width:92%"></em></i></div>
-        <div class="meter motivation"><div><span>やる気</span><b>80/100</b></div><i><em style="width:80%"></em></i></div>
-        <div class="exp"><span>EXP</span><i><em style="width:18%"></em></i><b>0/100</b></div>
+        <div class="compact-meter stamina"><span>体力 <b>92/100</b></span><i><em style="width:92%"></em></i></div>
+        <div class="compact-meter motivation"><span>やる気 <b>80/100</b></span><i><em style="width:80%"></em></i></div>
+        <div class="compact-meter experience"><span>EXP <b>0/100</b></span><i><em style="width:0%"></em></i></div>
       </div>
     </header>
 
@@ -34,32 +33,52 @@
     </section>
 
     <section class="room-card">
-      <div class="room-heading"><div><span class="online-dot"></span>ユニット病室</div><p>設備をタップして移動</p></div>
+      <div class="room-heading"><div><span class="online-dot"></span>ユニット病室</div><p>場所をタップして移動</p></div>
       <div class="room-map" id="room-map" aria-label="ユニット病室マップ">
-        <div class="window"><span></span><span></span><span></span></div>
-        <div class="wall-line"></div>
+        <div class="bed-zone">
+          <div class="ward-window" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="bed-grid">
+            <button class="map-target bed-card bed-blue" data-target="bed1" aria-label="Bed1 佐藤 太郎 78歳">
+              <span class="bed-heading"><b>Bed1</b><span class="bed-patient"><strong>佐藤 太郎</strong><small>78歳</small></span></span>
+              <span class="bed-visual"><i class="patient-avatar">●</i><i class="pillow"></i><i class="blanket"></i></span>
+              <span class="bedside-monitor" data-bedside-monitor="bed1"></span>
+              <span class="iv-pole" aria-hidden="true"><i></i><b></b></span>
+            </button>
+            <button class="map-target bed-card bed-pink" data-target="bed2" aria-label="Bed2 鈴木 花子 82歳">
+              <span class="bed-heading"><b>Bed2</b><span class="bed-patient"><strong>鈴木 花子</strong><small>82歳</small></span></span>
+              <span class="bed-visual"><i class="patient-avatar">●</i><i class="pillow"></i><i class="blanket"></i></span>
+              <span class="bedside-monitor" data-bedside-monitor="bed2"></span>
+              <span class="iv-pole" aria-hidden="true"><i></i><b></b></span>
+            </button>
+            <button class="map-target bed-card bed-mint" data-target="bed3" aria-label="Bed3 田中 一郎 69歳">
+              <span class="bed-heading"><b>Bed3</b><span class="bed-patient"><strong>田中 一郎</strong><small>69歳</small></span></span>
+              <span class="bed-visual"><i class="patient-avatar">●</i><i class="pillow"></i><i class="blanket"></i></span>
+              <span class="bedside-monitor" data-bedside-monitor="bed3"></span>
+              <span class="iv-pole" aria-hidden="true"><i></i><b></b></span>
+            </button>
+            <button class="map-target bed-card bed-purple is-empty" data-target="bed4" aria-label="Bed4 空床">
+              <span class="bed-heading"><b>Bed4</b><span class="bed-patient"><strong>空床</strong></span></span>
+              <span class="bed-visual"><i class="pillow"></i><i class="blanket"></i></span>
+              <span class="bedside-monitor is-off" data-bedside-monitor="bed4"></span>
+              <span class="iv-pole" aria-hidden="true"><i></i><b></b></span>
+            </button>
+          </div>
+        </div>
 
-        <button class="map-object bed bed1" data-target="bed1" style="--x:17%;--y:23%" aria-label="Bed1 肺炎">
-          <span class="bed-tag">Bed1</span><span class="patient patient-blue">●</span><span class="pillow"></span><span class="blanket"></span><small>肺炎</small>
-        </button>
-        <button class="map-object bed bed2" data-target="bed2" style="--x:65%;--y:23%" aria-label="Bed2 心不全">
-          <span class="bed-tag">Bed2</span><span class="patient patient-pink">●</span><span class="pillow"></span><span class="blanket"></span><small>心不全</small>
-        </button>
-        <button class="map-object bed bed3" data-target="bed3" style="--x:17%;--y:55%" aria-label="Bed3 消化管出血">
-          <span class="bed-tag">Bed3</span><span class="patient patient-green">●</span><span class="pillow"></span><span class="blanket"></span><small>消化管出血</small>
-        </button>
-        <button class="map-object bed empty bed4" data-target="bed4" style="--x:65%;--y:55%" aria-label="Bed4 空床">
-          <span class="bed-tag">Bed4</span><span class="pillow"></span><span class="blanket"></span><small>空床</small>
-        </button>
+        <div class="facility-zone" aria-label="病室設備">
+          <p class="facility-zone-title"><span>FACILITIES</span> 設備</p>
+          <div class="facility-grid">
+            <button class="map-target facility-button facility-pc" data-target="pc"><span class="facility-icon"><i>▤</i></span><span class="facility-label">スタッフPC</span></button>
+            <button class="map-target facility-button facility-monitor" data-target="monitor"><span class="facility-icon"><i>⌁</i><b>2</b></span><span class="facility-label">モニター</span></button>
+            <button class="map-target facility-button facility-infusion" data-target="infusion"><span class="facility-icon"><i>♙</i></span><span class="facility-label">点滴台</span></button>
+            <button class="map-target facility-button facility-sink" data-target="sink"><span class="facility-icon"><i>≈</i></span><span class="facility-label">手洗い</span></button>
+            <button class="map-target facility-button facility-shelf" data-target="shelf"><span class="facility-icon"><i>▦</i></span><span class="facility-label">物品棚</span></button>
+            <button class="map-target facility-button facility-trash" data-target="trash"><span class="facility-icon"><i>♲</i></span><span class="facility-label">ゴミ箱</span></button>
+            <button class="map-target facility-button facility-cart" data-target="cart"><span class="facility-icon"><i>＋</i></span><span class="facility-label">救急カート</span></button>
+          </div>
+        </div>
 
-        <button class="map-object equipment pc" data-target="pc" style="--x:18%;--y:84%"><span class="screen">▤</span><small>スタッフPC</small></button>
-        <button class="map-object equipment monitor" data-target="monitor" style="--x:43%;--y:84%"><span class="screen vital-wave">⌁</span><small>モニター</small><i>2</i></button>
-        <button class="map-object equipment mixing" data-target="mixing" style="--x:69%;--y:84%"><span>♙</span><small>ミキシング</small></button>
-        <button class="map-object equipment sink" data-target="sink" style="--x:89%;--y:15%"><span>≈</span><small>手洗い</small></button>
-        <button class="map-object equipment shelf" data-target="shelf" style="--x:89%;--y:45%"><span>▦</span><small>日用品棚</small></button>
-        <button class="map-object equipment trash" data-target="trash" style="--x:89%;--y:72%"><span>♲</span><small>ゴミ箱</small></button>
-
-        <div class="nurse" id="nurse" style="--nurse-x:50%;--nurse-y:68%" aria-label="プレイヤー">
+        <div class="nurse" id="nurse" style="--nurse-x:50%;--nurse-y:58%" aria-label="プレイヤー">
           <span class="nurse-cap">+</span><span class="nurse-head"></span><span class="nurse-body"></span><b>YOU</b>
         </div>
       </div>
@@ -76,6 +95,6 @@
     <div id="sheet-content"></div>
   </section>
   <div class="toast" id="toast" role="status"></div>
-  <script src="script.js"></script>
+  <script src="./script.js"></script>
 </body>
 </html>

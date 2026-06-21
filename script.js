@@ -1,25 +1,92 @@
-const patients = {
-  bed1: { bed: "Bed1", diagnosis: "肺炎", status: "酸素投与中。呼吸状態に注意。", vitals: { "SpO₂": "94%", RR: "24", HR: "104", BP: "132/74" } },
-  bed2: { bed: "Bed2", diagnosis: "心不全", status: "尿量低下傾向。呼吸苦、浮腫、尿量に注意。", vitals: { "SpO₂": "95%", RR: "22", HR: "110", BP: "148/86" } },
-  bed3: { bed: "Bed3", diagnosis: "消化管出血", status: "出血リスクあり。血圧低下、冷汗、黒色便、意識変化に注意。", vitals: { "SpO₂": "97%", RR: "20", HR: "116", BP: "96/58" } },
-  bed4: { bed: "Bed4", diagnosis: "空床", status: "ベッド準備中。", actions: ["ベッド準備", "物品確認"] }
+const DATA_FILES = {
+  patientMaster: "./data/patient_master.json",
+  activeBeds: "./data/active_beds.json",
+  medicationMaster: "./data/medication_master.json",
+  oralPrescriptions: "./data/oral_prescriptions.json",
+  injectionOrders: "./data/injection_orders.json"
 };
 
-const positions = {
-  bed1: [31, 31], bed2: [57, 31], bed3: [31, 61], bed4: [57, 61],
-  pc: [18, 74], monitor: [43, 74], mixing: [69, 74], sink: [78, 16], shelf: [78, 43], trash: [78, 68]
+const monitorLabels = { HR: "HR", NIBP: "NIBP", SpO2: "SpO₂", RR: "RR", ABP: "ABP", CVP: "CVP" };
+const coreMonitorFields = ["HR", "NIBP", "SpO2", "RR"];
+const expansionMonitorFields = ["ABP", "CVP"];
+const labReferences = {
+  TP: { min: 6.6, max: 8.1, unit: "g/dL" }, Alb: { min: 4.1, max: 5.1, unit: "g/dL" },
+  Na: { min: 138, max: 145, unit: "mEq/L" }, K: { min: 3.6, max: 4.8, unit: "mEq/L" },
+  Ca: { min: 8.8, max: 10.1, unit: "mg/dL" }
 };
-const labels = { pc: "スタッフ用PC", monitor: "セントラルモニター", mixing: "点滴ミキシング台", sink: "手洗い場", shelf: "オムツ／日用品棚", trash: "ゴミ箱" };
+
+let dataStore;
+let patients = {};
 const questState = new Set();
 let minutes = 9 * 60;
 let toastTimer;
-
 const nurse = document.querySelector("#nurse");
 const gameTime = document.querySelector("#game-time");
 const sheet = document.querySelector("#bottom-sheet");
 const backdrop = document.querySelector("#sheet-backdrop");
 const sheetContent = document.querySelector("#sheet-content");
 const toast = document.querySelector("#toast");
+
+async function loadJson(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  return response.json();
+}
+
+function calculateBmi(heightCm, weightKg) {
+  if (!heightCm || !weightKg) return null;
+  return Math.round((weightKg / ((heightCm / 100) ** 2)) * 10) / 10;
+}
+
+function createMonitor(patient) {
+  const vs = patient.admissionVitals;
+  const systolic = Number(String(vs.BP).split("/")[0]);
+  return {
+    HR: { value: vs.HR, display: String(vs.HR), lower: 50, upper: 100 },
+    NIBP: { value: systolic, display: vs.BP, lower: patient.admissionDiagnosis === "消化管出血" ? 100 : 90, upper: 160 },
+    SpO2: { value: vs.SpO2, display: `${vs.SpO2}%`, lower: 95, upper: 100 },
+    RR: { value: vs.RR, display: String(vs.RR), lower: 10, upper: 22 },
+    ABP: null, CVP: null
+  };
+}
+
+function createEmptyBed(bedId) {
+  return {
+    bedId, bed: `Bed${bedId.slice(-1)}`, patientId: null, name: "なし", age: "なし",
+    diagnosis: "空床", hospitalDay: "なし", status: "ベッド準備中。", monitor: null,
+    labs: null, order: "指示なし", handover: "空床", care: ["ベッド準備", "物品確認"]
+  };
+}
+
+function buildActivePatients() {
+  const masterById = new Map(dataStore.patientMaster.map(row => [row.patientId, { ...row, bmi: calculateBmi(row.heightCm, row.weightKg) }]));
+  dataStore.patientById = masterById;
+  dataStore.medicationById = new Map(dataStore.medicationMaster.map(row => [row.medicationId, row]));
+  patients = Object.fromEntries(dataStore.activeBeds.map(assignment => {
+    if (!assignment.patientId) return [assignment.bedId, createEmptyBed(assignment.bedId)];
+    const master = masterById.get(assignment.patientId);
+    const active = {
+      ...master,
+      bedId: assignment.bedId,
+      bed: `Bed${assignment.bedId.slice(-1)}`,
+      ageLabel: `${master.age}歳`,
+      diagnosis: master.admissionDiagnosis,
+      hospitalDay: `${assignment.hospitalDay}日目`,
+      monitor: createMonitor(master),
+      labs: master.labResults,
+      order: master.medicalOrder,
+      handover: master.handover
+    };
+    return [assignment.bedId, active];
+  }));
+}
+
+async function loadDataStore() {
+  const keys = Object.keys(DATA_FILES);
+  const values = await Promise.all(keys.map(key => loadJson(DATA_FILES[key])));
+  dataStore = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
+  buildActivePatients();
+}
 
 function advanceTime() {
   minutes += 5;
@@ -28,16 +95,24 @@ function advanceTime() {
 }
 
 function moveNurse(target) {
-  const [x, y] = positions[target];
-  nurse.style.setProperty("--nurse-x", `${x}%`);
-  nurse.style.setProperty("--nurse-y", `${y}%`);
+  const targetElement = document.querySelector(`[data-target="${target}"]`);
+  const map = document.querySelector("#room-map");
+  if (!targetElement || !map) return;
+  const targetRect = targetElement.getBoundingClientRect();
+  const mapRect = map.getBoundingClientRect();
+  const centerX = targetRect.left + targetRect.width / 2 - mapRect.left;
+  const isFacility = targetElement.classList.contains("facility-button");
+  const desiredY = targetRect.bottom - mapRect.top + (isFacility ? -10 : 12);
+  const maxY = isFacility ? mapRect.height - 20 : mapRect.height * .65 - 24;
+  nurse.style.setProperty("--nurse-x", `${(centerX / mapRect.width) * 100}%`);
+  nurse.style.setProperty("--nurse-y", `${(Math.min(desiredY, maxY) / mapRect.height) * 100}%`);
 }
 
 function showToast(message, success = false) {
   window.clearTimeout(toastTimer);
   toast.textContent = message;
   toast.className = `toast show${success ? " success" : ""}`;
-  toastTimer = window.setTimeout(() => { toast.className = "toast"; }, 2800);
+  toastTimer = window.setTimeout(() => { toast.className = "toast"; }, 3200);
 }
 
 function openSheet(html) {
@@ -54,33 +129,172 @@ function closeSheet() {
   document.body.style.overflow = "";
 }
 
-function patientView(patient) {
-  const vitals = patient.vitals ? `<div class="vitals-grid">${Object.entries(patient.vitals).map(([name, value]) => `<div class="vital-card"><span>${name}</span><b>${value}</b></div>`).join("")}</div>` : "";
-  const actions = patient.actions || ["状態を観察", "ケアを確認"];
-  return `<p class="sheet-kicker">PATIENT INFORMATION</p><h2 class="sheet-title">${patient.bed} <small>｜${patient.diagnosis}</small></h2><p class="info-status">${patient.status}</p>${vitals}<div class="action-list">${actions.map(action => `<button class="action-button" data-message="${action}は今後のアップデートで実装予定です">${action}</button>`).join("")}</div>`;
+function sheetHeader(kicker, title) {
+  return `<p class="sheet-kicker">${kicker}</p><h2 class="sheet-title">${title}</h2>`;
 }
 
-function pcView() {
-  return `<p class="sheet-kicker">STAFF TERMINAL</p><h2 class="sheet-title">スタッフ用PC</h2><div class="pc-frame"><div class="pc-topbar"><b>患者一覧</b><span>${gameTime.textContent}｜日勤</span></div>${Object.values(patients).map(p => `<div class="patient-row"><b>${p.bed}</b><span>${p.diagnosis}</span></div>`).join("")}</div><div class="pc-menu">${["患者一覧", "指示確認", "検査値", "記録", "申し送り"].map(item => `<button data-message="${item}メニューを選択しました">${item}</button>`).join("")}</div>`;
+function alarmDirection(measurement) {
+  if (!measurement) return null;
+  if (measurement.value < measurement.lower) return "low";
+  if (measurement.value > measurement.upper) return "high";
+  return null;
+}
+
+function monitorAlarms(patientId) {
+  const monitor = patients[patientId].monitor;
+  if (!monitor) return [];
+  return [...coreMonitorFields, ...expansionMonitorFields].flatMap(field => {
+    const direction = alarmDirection(monitor[field]);
+    return direction ? [{ patientId, field, direction }] : [];
+  });
+}
+
+function waveformMarkup(className = "central-wave") {
+  return `<span class="${className}" aria-label="心電図波形">─╱╲──╱│╲────╱╲─</span>`;
+}
+
+function bedsideMonitorMarkup(patientId) {
+  const patient = patients[patientId];
+  if (!patient.monitor) return `<span>STANDBY</span>`;
+  const values = coreMonitorFields.map(field => {
+    const measurement = patient.monitor[field];
+    return `<i class="${alarmDirection(measurement) ? "is-alarm" : ""}">${monitorLabels[field]} <b>${measurement.display}</b></i>`;
+  }).join("");
+  const expansion = expansionMonitorFields.map(field => patient.monitor[field] ? `${field} ${patient.monitor[field].display}` : `${field} --`).join(" ｜ ");
+  return `${waveformMarkup("bedside-wave")}<span class="bedside-values">${values}</span><span class="monitor-expansion">${expansion}</span>`;
+}
+
+function renderRoomFromData() {
+  Object.entries(patients).forEach(([bedId, patient]) => {
+    const card = document.querySelector(`[data-target="${bedId}"]`);
+    const patientLabel = card.querySelector(".bed-patient");
+    const visual = card.querySelector(".bed-visual");
+    const avatar = visual.querySelector(".patient-avatar");
+    card.setAttribute("aria-label", patient.patientId ? `${patient.bed} ${patient.name} ${patient.ageLabel}` : `${patient.bed} 空床`);
+    patientLabel.innerHTML = patient.patientId ? `<strong>${patient.name}</strong><small>${patient.ageLabel}</small>` : `<strong>空床</strong>`;
+    if (patient.patientId && !avatar) visual.insertAdjacentHTML("afterbegin", `<i class="patient-avatar">●</i>`);
+    if (!patient.patientId && avatar) avatar.remove();
+    card.querySelector(".bedside-monitor").innerHTML = bedsideMonitorMarkup(bedId);
+  });
+}
+
+function careMarkup(patient) {
+  return `<div class="detail-list">${patient.care.map(item => `<div class="detail-item"><b>CARE</b>${item}</div>`).join("")}</div>`;
+}
+
+function patientView(patientId) {
+  const patient = patients[patientId];
+  const vitals = patient.monitor ? `<div class="vitals-grid">${coreMonitorFields.map(field => `<div class="vital-card"><span>${monitorLabels[field]}</span><b>${patient.monitor[field].display}</b></div>`).join("")}</div>` : "";
+  return `${sheetHeader("PATIENT INFORMATION", `${patient.bed} <small>｜${patient.diagnosis}</small>`)}<p class="info-status">${patient.status}</p>${vitals}<div class="action-list"><button class="action-button" data-message="状態観察機能は今後実装予定です">状態を観察</button><button class="action-button" data-bed-care="${patientId}">ケアを確認</button></div>`;
+}
+
+function bedCareView(patientId) {
+  const patient = patients[patientId];
+  return `${sheetHeader("BEDSIDE CARE", `${patient.bed}｜ケア`)}<button class="back-button" data-bed-back="${patientId}">← 患者情報へ</button><div class="patient-summary"><div><strong>${patient.name}</strong><span>${patient.diagnosis}</span></div></div>${careMarkup(patient)}`;
+}
+
+function pcPatientListView() {
+  const rows = Object.entries(patients).map(([id, patient]) => `<button class="pc-patient-row" data-pc-patient="${id}" aria-label="${patient.bed} ${patient.name}を選択"><span class="row-bed">${patient.bed}</span><span>${patient.name}</span><span>${patient.ageLabel || patient.age}</span><span>${patient.diagnosis}</span><span>${patient.hospitalDay}</span></button>`).join("");
+  return `${sheetHeader("STAFF TERMINAL", "スタッフ用PC")}<div class="pc-frame"><div class="pc-topbar"><b>患者一覧</b><span>${gameTime.textContent}｜日勤</span></div><div class="pc-list-header"><span>Bed</span><span>氏名</span><span>年齢</span><span>診断名</span><span>入院</span></div><div class="pc-patient-list">${rows}</div></div>`;
+}
+
+function pcPatientMenuView(patientId) {
+  const patient = patients[patientId];
+  const items = [["profile","患者概要"],["orders","指示確認"],["labs","検査値"],["records","記録"],["handover","申し送り"],["care","ケア"],["injections","注射指示書"],["medications","内服処方"]];
+  return `${sheetHeader("ELECTRONIC CHART", `${patient.bed} 患者メニュー`)}<button class="back-button" data-pc-back="list">← 患者一覧へ</button><div class="pc-frame"><div class="pc-breadcrumb"><span>患者一覧</span><span>›</span><b>${patient.bed}</b></div><div class="patient-summary"><div><strong>${patient.name}</strong><span>${patient.ageLabel || patient.age} ｜ ${patient.diagnosis} ｜ 入院${patient.hospitalDay}</span></div></div></div><div class="pc-menu">${items.map(([view,label]) => `<button data-pc-view="${view}" data-patient="${patientId}">${label}</button>`).join("")}</div>`;
+}
+
+function labStatus(value, reference) {
+  if (value < reference.min) return "is-low";
+  if (value > reference.max) return "is-high";
+  return "is-normal";
+}
+
+function listMarkup(title, items, emptyText) {
+  return items.length ? `<div class="detail-list">${items.map(item => `<div class="detail-item"><b>${title}</b>${item}</div>`).join("")}</div>` : `<p class="info-status">${emptyText}</p>`;
+}
+
+function profileMarkup(patient) {
+  if (!patient.patientId) return `<p class="info-status">空床です。</p>`;
+  const vs = patient.admissionVitals;
+  const rows = [
+    ["基本情報", `${patient.sex} / ${patient.heightCm}cm / ${patient.weightKg}kg / BMI ${patient.bmi}`],
+    ["ADL・KP", `${patient.adl} / KP：${patient.keyPerson}`],
+    ["既往歴", patient.medicalHistory.join("、") || "なし"],
+    ["入院時VS", `BT ${vs.BT} / HR ${vs.HR} / BP ${vs.BP} / RR ${vs.RR} / SpO₂ ${vs.SpO2}%`],
+    ["入院計画", `予定${patient.plannedStayDays}日 / せん妄歴：${patient.deliriumHistory ? "あり" : "なし"}`]
+  ];
+  return `<div class="detail-list">${rows.map(([label, value]) => `<div class="detail-item"><b>${label}</b>${value}</div>`).join("")}</div>`;
+}
+
+function oralPrescriptionMarkup(patient) {
+  const prescriptions = dataStore.oralPrescriptions.filter(row => row.patientId === patient.patientId);
+  if (!prescriptions.length) return `<p class="info-status">内服処方はありません。</p>`;
+  return `<div class="medication-list">${prescriptions.map(prescription => {
+    const drug = dataStore.medicationById.get(prescription.medicationId);
+    const detail = `${drug.name}：${drug.effect}。主な副作用：${drug.sideEffects.join("、")}`;
+    return `<button class="medication-card" data-medication-id="${drug.medicationId}" data-message="${detail}"><span><b>${drug.name}</b><small>${drug.type}｜${drug.effect}</small></span><strong>${prescription.dose}｜${prescription.administration}</strong><i>${prescription.startDate}｜詳細 ›</i></button>`;
+  }).join("")}</div>`;
+}
+
+function injectionOrderMarkup(patient) {
+  const orders = dataStore.injectionOrders.filter(row => row.patientId === patient.patientId);
+  if (!orders.length) return `<p class="info-status">注射指示はありません。</p>`;
+  return `<div class="medication-list">${orders.map(order => {
+    const drug = dataStore.medicationById.get(order.medicationId);
+    const detail = `${drug.name}：${drug.effect}。主な副作用：${drug.sideEffects.join("、")}`;
+    return `<button class="medication-card" data-medication-id="${drug.medicationId}" data-message="${detail}"><span><b>${drug.name}</b><small>${order.route}｜${order.rate}</small></span><strong>${order.dose}｜${order.timing}</strong><i>${order.comment}｜詳細 ›</i></button>`;
+  }).join("")}</div>`;
+}
+
+function pcDetailView(patientId, view) {
+  const patient = patients[patientId];
+  const labels = { profile:"患者概要", orders:"指示確認", labs:"検査値", records:"記録", handover:"申し送り", care:"ケア", injections:"注射指示書", medications:"内服処方" };
+  let content;
+  if (view === "profile") content = profileMarkup(patient);
+  else if (view === "labs") content = patient.labs ? `<div class="lab-list">${Object.entries(labReferences).map(([name, reference]) => `<div class="lab-row ${labStatus(patient.labs[name], reference)}"><strong>${name}</strong><span>${patient.labs[name]} ${reference.unit}</span><small>基準 ${reference.min}〜${reference.max}</small></div>`).join("")}</div>` : `<p class="info-status">検査値はありません。</p>`;
+  else if (view === "orders") content = listMarkup("指示", [patient.order], "指示はありません。");
+  else if (view === "records") content = `<p class="info-status">記録機能は今後実装予定です</p>`;
+  else if (view === "handover") content = listMarkup("申し送り", [patient.handover], "申し送りはありません。");
+  else if (view === "care") content = careMarkup(patient);
+  else if (view === "injections") content = injectionOrderMarkup(patient);
+  else content = oralPrescriptionMarkup(patient);
+  return `${sheetHeader("ELECTRONIC CHART", `${patient.bed}｜${labels[view]}`)}<button class="back-button" data-pc-back="menu" data-patient="${patientId}">← ${patient.bed}メニューへ</button><div class="patient-summary"><div><strong>${patient.name}</strong><span>${patient.ageLabel || patient.age} ｜ ${patient.diagnosis}</span></div></div>${content}`;
+}
+
+function centralMonitorBedMarkup(patientId) {
+  const patient = patients[patientId];
+  if (!patient.monitor) return `<div class="monitor-bed"><span class="monitor-alarm-strip is-clear">NO ALARM</span><strong>${patient.bed}<small>空床</small></strong><span class="empty-monitor">STANDBY</span></div>`;
+  const alarms = monitorAlarms(patientId);
+  const values = coreMonitorFields.map(field => `<i class="${alarmDirection(patient.monitor[field]) ? "is-alarm" : ""}"><small>${monitorLabels[field]}</small>${patient.monitor[field].display}</i>`).join("");
+  const alarmStrip = alarms.length ? alarms.map(alarm => `<button data-alarm-patient="${patientId}" data-alarm-field="${alarm.field}">${monitorLabels[alarm.field]} ${alarm.direction}</button>`).join("") : `<span class="is-clear">NO ALARM</span>`;
+  return `<div class="monitor-bed ${alarms.length ? "alarm" : ""}"><span class="monitor-alarm-strip">${alarmStrip}</span><strong>${patient.bed}<small>${patient.name}</small></strong>${waveformMarkup()}<span class="central-values">${values}</span></div>`;
 }
 
 function monitorView() {
-  const beds = [
-    ["Bed1", "SpO₂ 94% / RR 24 / HR 104", "alarm"], ["Bed2", "SpO₂ 95% / RR 22 / HR 110", ""],
-    ["Bed3", "BP 96/58 / HR 116", "alarm"], ["Bed4", "空床", ""]
-  ];
-  return `<p class="sheet-kicker">CENTRAL MONITOR</p><h2 class="sheet-title">セントラルモニター</h2><div class="monitor-frame"><div class="pc-topbar"><b>UNIT VITALS</b><span>● LIVE</span></div><div class="monitor-grid">${beds.map(([bed, value, alarm]) => `<div class="monitor-bed ${alarm}"><strong>${bed}</strong><span>${value}</span></div>`).join("")}</div><p class="alarm-text orange">Bed1：呼吸状態注意</p><p class="alarm-text">Bed3：血圧低下注意</p></div>`;
+  return `${sheetHeader("CENTRAL MONITOR", "セントラルモニター")}<div class="monitor-frame"><div class="pc-topbar"><b>4 BED VIEW</b><span>● LIVE</span></div><div class="monitor-grid">${Object.keys(patients).map(centralMonitorBedMarkup).join("")}</div></div><div id="alarm-detail"></div>`;
+}
+
+function showAlarmDetail(patientId, field) {
+  const patient = patients[patientId];
+  const measurement = patient.monitor[field];
+  const direction = alarmDirection(measurement);
+  document.querySelector("#alarm-detail").innerHTML = `<div class="alarm-detail"><b>${patient.bed} ${monitorLabels[field]} ${direction}</b><br>現在値 ${measurement.display} / 設定範囲 ${measurement.lower}〜${measurement.upper}<button class="move-only-button" data-move-only="${patientId}">${patient.bed}へ移動する</button></div>`;
 }
 
 function equipmentView(target) {
-  const configs = {
-    mixing: ["IV PREPARATION", "点滴準備メニュー", "安全確認をして点滴を準備します。", ["指示を確認", "薬剤を準備"]],
-    sink: ["HAND HYGIENE", "手指衛生", "適切なタイミングと手順を確認します。", ["手洗いを実施", "手順を確認"]],
-    shelf: ["SUPPLY STORAGE", "オムツ／日用品棚", "患者ケアに必要な日用品を確認できます。", ["在庫を確認", "物品を取り出す"]],
-    trash: ["WASTE STATION", "ゴミ箱", "廃棄物を正しく分別します。", ["分別を確認", "廃棄する"]]
-  };
-  const [kicker, title, info, actions] = configs[target];
-  return `<p class="sheet-kicker">${kicker}</p><h2 class="sheet-title">${title}</h2><p class="info-status">${info}</p><div class="action-list">${actions.map(action => `<button class="action-button" data-message="${action}しました">${action}</button>`).join("")}</div>`;
+  if (target === "infusion") {
+    const orders = dataStore.injectionOrders.map(order => {
+      const patient = dataStore.patientById.get(order.patientId);
+      const drug = dataStore.medicationById.get(order.medicationId);
+      return `${patient.name}｜${drug.name} ${order.dose} ${order.timing}`;
+    });
+    return `${sheetHeader("INFUSION STATION", "点滴台")}<p class="info-status">分離管理された注射指示書データと連動しています。</p><div class="supply-shelves"><div><b>上段</b>シリンジ</div><div><b>中段</b>点滴ルート</div><div><b>本日分の点滴薬</b>${orders.join(" / ")}</div></div>`;
+  }
+  if (target === "shelf") return `${sheetHeader("SUPPLY STORAGE", "物品棚")}<p class="info-status">物品補充ミニゲームは今後実装予定です。</p>${listMarkup("物品", ["オムツ","着替え","歯ブラシ","コップ","ティッシュ","その他日用品"], "物品なし")}`;
+  if (target === "cart") return `${sheetHeader("EMERGENCY CART", "救急カート")}<p class="info-status">救急カート点検機能は今後実装予定です。</p>${listMarkup("点検項目", ["中身整理","点検","不足分チェック"], "")}`;
+  if (target === "sink") return `${sheetHeader("HAND HYGIENE", "手洗い")}<p class="info-status">正しい手順やタイミングを確認する手洗い機能は今後実装予定です。</p>`;
+  return `${sheetHeader("WASTE STATION", "ゴミ箱")}<p class="info-status">感染性廃棄物と一般廃棄物を扱う廃棄物分別機能は今後実装予定です。</p>`;
 }
 
 function updateQuest(target) {
@@ -98,18 +312,47 @@ function interact(target) {
   advanceTime();
   updateQuest(target);
   window.setTimeout(() => {
-    if (patients[target]) openSheet(patientView(patients[target]));
-    else if (target === "pc") openSheet(pcView());
+    if (patients[target]) openSheet(patientView(target));
+    else if (target === "pc") openSheet(pcPatientListView());
     else if (target === "monitor") openSheet(monitorView());
     else openSheet(equipmentView(target));
-  }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 420);
+  }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 380);
 }
 
-document.querySelectorAll(".map-object").forEach(object => object.addEventListener("click", () => interact(object.dataset.target)));
-document.querySelector("#close-sheet").addEventListener("click", closeSheet);
-backdrop.addEventListener("click", closeSheet);
-document.addEventListener("keydown", event => { if (event.key === "Escape" && !sheet.hidden) closeSheet(); });
-sheetContent.addEventListener("click", event => {
-  const button = event.target.closest("[data-message]");
-  if (button) showToast(button.dataset.message);
-});
+function bindInteractions() {
+  document.querySelectorAll(".map-target").forEach(target => target.addEventListener("click", () => interact(target.dataset.target)));
+  document.querySelector("#close-sheet").addEventListener("click", closeSheet);
+  backdrop.addEventListener("click", closeSheet);
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && !sheet.hidden) closeSheet(); });
+  sheetContent.addEventListener("click", event => {
+    const patientRow = event.target.closest("[data-pc-patient]");
+    const pcViewButton = event.target.closest("[data-pc-view]");
+    const pcBackButton = event.target.closest("[data-pc-back]");
+    const bedCareButton = event.target.closest("[data-bed-care]");
+    const bedBackButton = event.target.closest("[data-bed-back]");
+    const alarm = event.target.closest("[data-alarm-patient]");
+    const moveOnly = event.target.closest("[data-move-only]");
+    const messageButton = event.target.closest("[data-message]");
+    if (patientRow) { advanceTime(); sheetContent.innerHTML = pcPatientMenuView(patientRow.dataset.pcPatient); }
+    else if (pcViewButton) { advanceTime(); sheetContent.innerHTML = pcDetailView(pcViewButton.dataset.patient, pcViewButton.dataset.pcView); }
+    else if (pcBackButton) sheetContent.innerHTML = pcBackButton.dataset.pcBack === "list" ? pcPatientListView() : pcPatientMenuView(pcBackButton.dataset.patient);
+    else if (bedCareButton) sheetContent.innerHTML = bedCareView(bedCareButton.dataset.bedCare);
+    else if (bedBackButton) sheetContent.innerHTML = patientView(bedBackButton.dataset.bedBack);
+    else if (alarm) showAlarmDetail(alarm.dataset.alarmPatient, alarm.dataset.alarmField);
+    else if (moveOnly) { moveNurse(moveOnly.dataset.moveOnly); closeSheet(); showToast(`${patients[moveOnly.dataset.moveOnly].bed}付近へ移動しました`); }
+    else if (messageButton) showToast(messageButton.dataset.message);
+  });
+}
+
+async function init() {
+  try {
+    await loadDataStore();
+    renderRoomFromData();
+    bindInteractions();
+  } catch (error) {
+    console.error("Game data could not be loaded", error);
+    showToast("データを読み込めませんでした。ローカルサーバーから起動してください。");
+  }
+}
+
+init();

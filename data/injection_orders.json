@@ -1,0 +1,5 @@
+[
+  { "patientId": "p001", "medicationId": "med003", "dose": "2g", "route": "点滴静注", "rate": "30分", "timing": "09:00", "comment": "初回投与時は発疹に注意" },
+  { "patientId": "p002", "medicationId": "med004", "dose": "500mL", "route": "点滴静注", "rate": "40mL/h", "timing": "持続", "comment": "心負荷と水分出納に注意" },
+  { "patientId": "p003", "medicationId": "med004", "dose": "500mL", "route": "点滴静注", "rate": "100mL/h", "timing": "10:00", "comment": "血圧を確認" }
+]

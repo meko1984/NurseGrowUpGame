@@ -1,0 +1,6 @@
+[
+  { "medicationId": "med001", "name": "アセトアミノフェン", "type": "内服", "effect": "解熱鎮痛", "sideEffects": ["肝障害"], "notes": "総投与量に注意" },
+  { "medicationId": "med002", "name": "フロセミド", "type": "内服", "effect": "利尿", "sideEffects": ["低K血症", "脱水", "血圧低下"], "notes": "尿量と電解質を確認" },
+  { "medicationId": "med003", "name": "セフトリアキソン", "type": "注射", "effect": "抗菌薬", "sideEffects": ["発疹", "アナフィラキシー"], "notes": "アレルギー歴を確認" },
+  { "medicationId": "med004", "name": "生理食塩液", "type": "注射", "effect": "補液", "sideEffects": ["体液過剰"], "notes": "投与速度と水分出納を確認" }
+]

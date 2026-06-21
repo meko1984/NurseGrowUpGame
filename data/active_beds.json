@@ -1,0 +1,6 @@
+[
+  { "bedId": "bed1", "patientId": "p001", "hospitalDay": 3 },
+  { "bedId": "bed2", "patientId": "p002", "hospitalDay": 5 },
+  { "bedId": "bed3", "patientId": "p003", "hospitalDay": 1 },
+  { "bedId": "bed4", "patientId": null, "hospitalDay": null }
+]

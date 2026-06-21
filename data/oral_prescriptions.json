@@ -1,0 +1,4 @@
+[
+  { "patientId": "p001", "medicationId": "med001", "dose": "500mg", "administration": "発熱時", "startDate": "入院1日目", "comment": "38℃以上で使用" },
+  { "patientId": "p002", "medicationId": "med002", "dose": "20mg", "administration": "朝食後", "startDate": "入院1日目", "comment": "尿量を確認" }
+]
