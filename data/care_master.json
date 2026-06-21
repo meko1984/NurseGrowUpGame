@@ -1,0 +1,11 @@
+[
+  { "careId": "care_oral", "name": "口腔ケア", "category": "清潔", "description": "口腔内を清潔に保つ", "requiredItems": ["歯ブラシ", "コップ", "ティッシュ"], "miniGameType": "item_select", "weight": 2, "comment": "物品棚ミニゲームと連動予定" },
+  { "careId": "care_positioning", "name": "体位調整", "category": "安楽", "description": "呼吸状態と安楽を考慮して体位を整える", "requiredItems": ["枕", "クッション"], "miniGameType": "position_select", "weight": 2, "comment": "体位選択ミニゲームへ拡張予定" },
+  { "careId": "care_respiratory_observation", "name": "呼吸状態観察", "category": "観察", "description": "呼吸数、SpO₂、呼吸音、呼吸苦を確認する", "requiredItems": ["聴診器", "パルスオキシメータ"], "miniGameType": "observation_select", "weight": 3, "comment": "肺炎患者では重要度を高く設定" },
+  { "careId": "care_urine_output", "name": "尿量測定", "category": "排泄", "description": "尿量と水分出納を確認する", "requiredItems": ["計量カップ", "記録表"], "miniGameType": "measurement", "weight": 3, "comment": "心不全の水分管理と連動予定" },
+  { "careId": "care_edema_observation", "name": "浮腫観察", "category": "観察", "description": "四肢の浮腫と左右差を確認する", "requiredItems": [], "miniGameType": "observation_select", "weight": 2, "comment": "観察部位選択へ拡張予定" },
+  { "careId": "care_weight", "name": "体重測定", "category": "測定", "description": "同じ条件で体重を測定する", "requiredItems": ["体重計"], "miniGameType": "measurement", "weight": 2, "comment": "日ごとの変化比較に使用予定" },
+  { "careId": "care_stool_observation", "name": "便性状確認", "category": "観察", "description": "色、量、性状を確認する", "requiredItems": ["手袋"], "miniGameType": "observation_select", "weight": 3, "comment": "消化管出血の出血兆候と連動予定" },
+  { "careId": "care_consciousness", "name": "意識レベル観察", "category": "観察", "description": "意識レベルと変化を確認する", "requiredItems": [], "miniGameType": "assessment", "weight": 3, "comment": "急変イベントの条件に使用予定" },
+  { "careId": "care_rest_level", "name": "安静度確認", "category": "安全", "description": "指示された安静度と離床範囲を確認する", "requiredItems": [], "miniGameType": "instruction_check", "weight": 2, "comment": "指示確認画面との連動を想定" }
+]

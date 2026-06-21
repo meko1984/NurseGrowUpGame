@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>看護師道場-新人成長物語-</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=20260622">
 </head>
 <body>
   <main class="game-shell">
@@ -18,17 +18,17 @@
         <div class="shift-clock"><small>日勤</small><strong id="game-time">09:00</strong></div>
       </div>
       <div class="compact-stats">
-        <div class="level-chip"><b>Lv.1</b><span>新人ナース</span></div>
-        <div class="compact-meter stamina"><span>体力 <b>92/100</b></span><i><em style="width:92%"></em></i></div>
-        <div class="compact-meter motivation"><span>やる気 <b>80/100</b></span><i><em style="width:80%"></em></i></div>
-        <div class="compact-meter experience"><span>EXP <b>0/100</b></span><i><em style="width:0%"></em></i></div>
+        <div class="level-chip"><b id="player-level">Lv.1</b><span id="player-role">新人ナース</span></div>
+        <div class="compact-meter stamina"><span>体力 <b id="player-stamina">92/100</b></span><i><em id="stamina-meter" style="width:92%"></em></i></div>
+        <div class="compact-meter motivation"><span>やる気 <b id="player-motivation">80/100</b></span><i><em id="motivation-meter" style="width:80%"></em></i></div>
+        <div class="compact-meter experience"><span>EXP <b id="player-exp">0/100</b></span><i><em id="experience-meter" style="width:0%"></em></i></div>
       </div>
     </header>
 
     <section class="quest-card" aria-labelledby="quest-title">
       <div class="quest-heading"><span class="quest-icon">★</span><div><p>TRAINING QUEST</p><h2 id="quest-title">病室の基本確認をしよう</h2></div><b id="quest-count">0/3</b></div>
       <div class="quest-tasks">
-        <span data-quest="bed1">○ Bed1</span><span data-quest="pc">○ PC</span><span data-quest="monitor">○ モニター</span>
+        <span data-quest="bed1">○ Bed1</span><span data-quest="pc">○ カルテ</span><span data-quest="monitor">○ モニター</span>
       </div>
     </section>
 
@@ -68,7 +68,7 @@
         <div class="facility-zone" aria-label="病室設備">
           <p class="facility-zone-title"><span>FACILITIES</span> 設備</p>
           <div class="facility-grid">
-            <button class="map-target facility-button facility-pc" data-target="pc"><span class="facility-icon"><i>▤</i></span><span class="facility-label">スタッフPC</span></button>
+            <button class="map-target facility-button facility-pc" data-target="pc" aria-label="カルテ"><span class="facility-icon"><i>▤</i></span><span class="facility-label">カルテ</span></button>
             <button class="map-target facility-button facility-monitor" data-target="monitor"><span class="facility-icon"><i>⌁</i><b>2</b></span><span class="facility-label">モニター</span></button>
             <button class="map-target facility-button facility-infusion" data-target="infusion"><span class="facility-icon"><i>♙</i></span><span class="facility-label">点滴台</span></button>
             <button class="map-target facility-button facility-sink" data-target="sink"><span class="facility-icon"><i>≈</i></span><span class="facility-label">手洗い</span></button>
@@ -95,6 +95,6 @@
     <div id="sheet-content"></div>
   </section>
   <div class="toast" id="toast" role="status"></div>
-  <script src="./script.js"></script>
+  <script src="./script.js?v=20260622"></script>
 </body>
 </html>

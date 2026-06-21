@@ -3,7 +3,12 @@ const DATA_FILES = {
   activeBeds: "./data/active_beds.json",
   medicationMaster: "./data/medication_master.json",
   oralPrescriptions: "./data/oral_prescriptions.json",
-  injectionOrders: "./data/injection_orders.json"
+  injectionOrders: "./data/injection_orders.json",
+  quests: "./data/quests.json",
+  player: "./data/player.json",
+  events: "./data/events.json",
+  careMaster: "./data/care_master.json",
+  patientCarePlans: "./data/patient_care_plans.json"
 };
 
 const monitorLabels = { HR: "HR", NIBP: "NIBP", SpO2: "SpO₂", RR: "RR", ABP: "ABP", CVP: "CVP" };
@@ -15,9 +20,36 @@ const labReferences = {
   Ca: { min: 8.8, max: 10.1, unit: "mg/dL" }
 };
 
+// Equipment-specific content stays data-like so a real mini-game can replace
+// each placeholder without changing the map interaction flow.
+const miniGameDefinitions = {
+  sink: {
+    kicker: "HAND HYGIENE MINI GAME", title: "手指衛生チェック",
+    purpose: "正しい手指衛生のタイミングを選ぶ",
+    planned: "今後、手指衛生の5つのタイミングや流水／アルコールの使い分けをゲーム化します。"
+  },
+  shelf: {
+    kicker: "SUPPLY MINI GAME", title: "物品準備",
+    purpose: "ケアに必要な物品を選ぶ",
+    planned: "オムツ、着替え、歯ブラシ、コップ、ティッシュなどから必要物品を選択できるようにします。"
+  },
+  trash: {
+    kicker: "WASTE MINI GAME", title: "廃棄物分別",
+    purpose: "一般ゴミ、感染性廃棄物、鋭利物などを正しく分別する",
+    planned: "物品カードを正しい廃棄先へ振り分けるゲームを実装予定です。"
+  },
+  cart: {
+    kicker: "EMERGENCY CART MINI GAME", title: "救急カート点検",
+    purpose: "不足物品や期限切れ物品を確認する",
+    planned: "中身整理、点検、不足分チェックをゲーム化する予定です。"
+  }
+};
+
 let dataStore;
 let patients = {};
-const questState = new Set();
+let playerState;
+let questState = [];
+let eventState = [];
 let minutes = 9 * 60;
 let toastTimer;
 const nurse = document.querySelector("#nurse");
@@ -85,6 +117,14 @@ async function loadDataStore() {
   const keys = Object.keys(DATA_FILES);
   const values = await Promise.all(keys.map(key => loadJson(DATA_FILES[key])));
   dataStore = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
+  dataStore.careById = new Map(dataStore.careMaster.map(row => [row.careId, row]));
+  dataStore.carePlanByPatientId = new Map(dataStore.patientCarePlans.map(row => [row.patientId, row]));
+  playerState = { ...dataStore.player };
+  questState = dataStore.quests.map(quest => ({
+    ...quest,
+    steps: quest.steps.map(step => ({ ...step }))
+  }));
+  eventState = dataStore.events.map(event => ({ ...event }));
   buildActivePatients();
 }
 
@@ -92,6 +132,54 @@ function advanceTime() {
   minutes += 5;
   const hours = Math.floor(minutes / 60) % 24;
   gameTime.textContent = `${String(hours).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  checkScheduledEvents();
+}
+
+function renderPlayerStatus() {
+  document.querySelector("#player-level").textContent = `Lv.${playerState.level}`;
+  document.querySelector("#player-role").textContent = playerState.role;
+  document.querySelector("#player-stamina").textContent = `${playerState.stamina}/100`;
+  document.querySelector("#player-motivation").textContent = `${playerState.motivation}/100`;
+  document.querySelector("#player-exp").textContent = `${playerState.exp}/${playerState.nextLevelExp}`;
+  document.querySelector("#stamina-meter").style.width = `${Math.min(playerState.stamina, 100)}%`;
+  document.querySelector("#motivation-meter").style.width = `${Math.min(playerState.motivation, 100)}%`;
+  document.querySelector("#experience-meter").style.width = `${Math.min((playerState.exp / playerState.nextLevelExp) * 100, 100)}%`;
+}
+
+function grantExperience(amount) {
+  playerState.exp += amount;
+  const levelUpMessages = [];
+  while (playerState.exp >= playerState.nextLevelExp) {
+    playerState.exp -= playerState.nextLevelExp;
+    playerState.level += 1;
+    playerState.nextLevelExp = Math.round(playerState.nextLevelExp * 1.25);
+    levelUpMessages.push(`レベルアップ！ Lv.${playerState.level}になりました`);
+  }
+  renderPlayerStatus();
+  return levelUpMessages;
+}
+
+function timeToMinutes(time) {
+  const [hours, mins] = time.split(":").map(Number);
+  return hours * 60 + mins;
+}
+
+// Event records are runtime copies. A future save layer can persist triggered
+// state without changing scheduling or event handlers.
+function checkScheduledEvents() {
+  eventState.filter(event => !event.triggered && timeToMinutes(event.time) <= minutes).forEach(event => {
+    event.triggered = true;
+    if (event.type === "monitor_alarm") {
+      const patient = Object.values(patients).find(item => item.patientId === event.targetPatientId);
+      const measurement = patient?.monitor?.[event.parameter];
+      if (measurement) {
+        measurement.value = event.newValue;
+        measurement.display = event.parameter === "SpO2" ? `${event.newValue}%` : String(event.newValue);
+        renderRoomFromData();
+      }
+    }
+    showToast(event.message);
+  });
 }
 
 function moveNurse(target) {
@@ -178,8 +266,22 @@ function renderRoomFromData() {
   });
 }
 
+function carePlanFor(patient) {
+  if (!patient.patientId) return null;
+  return dataStore.carePlanByPatientId.get(patient.patientId) || null;
+}
+
 function careMarkup(patient) {
-  return `<div class="detail-list">${patient.care.map(item => `<div class="detail-item"><b>CARE</b>${item}</div>`).join("")}</div>`;
+  const plan = carePlanFor(patient);
+  if (!plan) return `<p class="info-status">${patient.patientId ? "ケア計画は未設定です。" : "空床です。ベッド準備と物品確認を行います。"}</p>`;
+  const cards = plan.selectedCareIds.map(careId => dataStore.careById.get(careId)).filter(Boolean).map(care => `
+    <button class="care-card" data-message="${care.name}の実施機能は今後実装予定です">
+      <span><b>${care.name}</b><small>${care.category}｜重要度 ${care.weight}</small></span>
+      <p>${care.description}</p>
+      <i>必要物品：${care.requiredItems.join("、") || "なし"}</i>
+      <em>MINI GAME：${care.miniGameType}</em>
+    </button>`).join("");
+  return `<p class="care-plan-note">入院時に設定したケア計画（試作）</p><div class="care-list">${cards}</div><button class="future-button" data-message="ケア計画の編集・採点機能は今後実装予定です">ケア計画を確認・編集</button>`;
 }
 
 function patientView(patientId) {
@@ -195,7 +297,7 @@ function bedCareView(patientId) {
 
 function pcPatientListView() {
   const rows = Object.entries(patients).map(([id, patient]) => `<button class="pc-patient-row" data-pc-patient="${id}" aria-label="${patient.bed} ${patient.name}を選択"><span class="row-bed">${patient.bed}</span><span>${patient.name}</span><span>${patient.ageLabel || patient.age}</span><span>${patient.diagnosis}</span><span>${patient.hospitalDay}</span></button>`).join("");
-  return `${sheetHeader("STAFF TERMINAL", "スタッフ用PC")}<div class="pc-frame"><div class="pc-topbar"><b>患者一覧</b><span>${gameTime.textContent}｜日勤</span></div><div class="pc-list-header"><span>Bed</span><span>氏名</span><span>年齢</span><span>診断名</span><span>入院</span></div><div class="pc-patient-list">${rows}</div></div>`;
+  return `${sheetHeader("ELECTRONIC CHART", "カルテ")}<div class="pc-frame"><div class="pc-topbar"><b>患者一覧</b><span>${gameTime.textContent}｜日勤</span></div><div class="pc-list-header"><span>Bed</span><span>氏名</span><span>年齢</span><span>診断名</span><span>入院</span></div><div class="pc-patient-list">${rows}</div></div>`;
 }
 
 function pcPatientMenuView(patientId) {
@@ -291,20 +393,40 @@ function equipmentView(target) {
     });
     return `${sheetHeader("INFUSION STATION", "点滴台")}<p class="info-status">分離管理された注射指示書データと連動しています。</p><div class="supply-shelves"><div><b>上段</b>シリンジ</div><div><b>中段</b>点滴ルート</div><div><b>本日分の点滴薬</b>${orders.join(" / ")}</div></div>`;
   }
-  if (target === "shelf") return `${sheetHeader("SUPPLY STORAGE", "物品棚")}<p class="info-status">物品補充ミニゲームは今後実装予定です。</p>${listMarkup("物品", ["オムツ","着替え","歯ブラシ","コップ","ティッシュ","その他日用品"], "物品なし")}`;
-  if (target === "cart") return `${sheetHeader("EMERGENCY CART", "救急カート")}<p class="info-status">救急カート点検機能は今後実装予定です。</p>${listMarkup("点検項目", ["中身整理","点検","不足分チェック"], "")}`;
-  if (target === "sink") return `${sheetHeader("HAND HYGIENE", "手洗い")}<p class="info-status">正しい手順やタイミングを確認する手洗い機能は今後実装予定です。</p>`;
-  return `${sheetHeader("WASTE STATION", "ゴミ箱")}<p class="info-status">感染性廃棄物と一般廃棄物を扱う廃棄物分別機能は今後実装予定です。</p>`;
+  return miniGamePlaceholderView(target);
+}
+
+function miniGamePlaceholderView(target) {
+  const game = miniGameDefinitions[target];
+  if (!game) return `${sheetHeader("FACILITY", "設備")}<p class="info-status">この設備の機能は今後実装予定です。</p>`;
+  return `${sheetHeader(game.kicker, game.title)}<div class="mini-game-card"><span class="mini-game-badge">プチクエスト / PROTOTYPE</span><h3>${game.purpose}</h3><p>${game.planned}</p><button class="future-button" data-message="${game.title}は現在設計中です">ミニゲームを確認</button></div>`;
+}
+
+function activeQuest() {
+  return questState.find(quest => quest.status === "active") || null;
+}
+
+function renderActiveQuest() {
+  const quest = activeQuest();
+  if (!quest) return;
+  const completed = quest.steps.filter(step => step.completed).length;
+  document.querySelector("#quest-title").textContent = quest.title;
+  document.querySelector("#quest-count").textContent = `${completed}/${quest.steps.length}`;
+  document.querySelector(".quest-tasks").innerHTML = quest.steps.map(step => `<span class="${step.completed ? "done" : ""}" data-quest="${step.target}">${step.completed ? "✓" : "○"} ${step.label.replace("を確認する", "")}</span>`).join("");
 }
 
 function updateQuest(target) {
-  if (!["bed1", "pc", "monitor"].includes(target) || questState.has(target)) return;
-  questState.add(target);
-  const task = document.querySelector(`[data-quest="${target}"]`);
-  task.classList.add("done");
-  task.textContent = `✓ ${target === "bed1" ? "Bed1" : target === "pc" ? "PC" : "モニター"}`;
-  document.querySelector("#quest-count").textContent = `${questState.size}/3`;
-  if (questState.size === 3) showToast("クエスト達成：病室の基本確認が完了しました", true);
+  const quest = activeQuest();
+  if (!quest) return;
+  const step = quest.steps.find(item => item.target === target && !item.completed);
+  if (!step) return;
+  step.completed = true;
+  renderActiveQuest();
+  if (quest.steps.every(item => item.completed)) {
+    quest.status = "completed";
+    const levelUps = grantExperience(quest.rewardExp);
+    showToast(`クエスト達成：${quest.title}\n経験値 +${quest.rewardExp}${levelUps.length ? `\n${levelUps.join("\n")}` : ""}`, true);
+  }
 }
 
 function interact(target) {
@@ -348,6 +470,8 @@ async function init() {
   try {
     await loadDataStore();
     renderRoomFromData();
+    renderPlayerStatus();
+    renderActiveQuest();
     bindInteractions();
   } catch (error) {
     console.error("Game data could not be loaded", error);

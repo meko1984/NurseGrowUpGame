@@ -1,0 +1,14 @@
+[
+  {
+    "eventId": "event_001",
+    "time": "10:30",
+    "type": "monitor_alarm",
+    "targetBed": "Bed1",
+    "targetPatientId": "p001",
+    "parameter": "SpO2",
+    "newValue": 88,
+    "message": "Bed1のSpO₂が低下しました",
+    "triggered": false,
+    "comment": "行動後の時刻確認で発火する試作イベント。将来は条件や優先度を追加する。"
+  }
+]

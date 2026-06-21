@@ -1,0 +1,5 @@
+[
+  { "patientId": "p001", "selectedCareIds": ["care_oral", "care_positioning", "care_respiratory_observation"], "idealCareIds": ["care_oral", "care_positioning", "care_respiratory_observation"], "completedCareIds": [], "score": null, "comment": "肺炎患者。呼吸状態観察、口腔ケア、体位調整を理想ケアとして設定。" },
+  { "patientId": "p002", "selectedCareIds": ["care_urine_output", "care_edema_observation", "care_weight"], "idealCareIds": ["care_urine_output", "care_edema_observation", "care_weight"], "completedCareIds": [], "score": null, "comment": "心不全患者。水分出納、浮腫、体重変化を中心に設定。" },
+  { "patientId": "p003", "selectedCareIds": ["care_stool_observation", "care_consciousness", "care_rest_level"], "idealCareIds": ["care_stool_observation", "care_consciousness", "care_rest_level"], "completedCareIds": [], "score": null, "comment": "消化管出血患者。出血兆候と循環変化の早期発見を重視。" }
+]

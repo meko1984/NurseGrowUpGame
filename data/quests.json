@@ -1,0 +1,60 @@
+[
+  {
+    "questId": "main_rank_001",
+    "type": "昇段試験",
+    "title": "病室の基本確認をしよう",
+    "description": "Bed1、カルテ、モニターを確認する",
+    "difficulty": 1,
+    "steps": [
+      { "stepId": "check_bed1", "label": "Bed1を確認する", "target": "bed1", "completed": false },
+      { "stepId": "check_chart", "label": "カルテを確認する", "target": "pc", "completed": false },
+      { "stepId": "check_monitor", "label": "モニターを確認する", "target": "monitor", "completed": false }
+    ],
+    "rewardExp": 10,
+    "status": "active",
+    "relatedTarget": "unit_room",
+    "comment": "初期プロトタイプ用の昇段試験。難易度と経験値はプレイテスト後に調整する。"
+  },
+  {
+    "questId": "daily_nurse_001",
+    "type": "看護クエスト",
+    "title": "受け持ち患者を観察しよう",
+    "description": "日々の看護業務を想定した繰り返しクエスト",
+    "difficulty": 1,
+    "steps": [
+      { "stepId": "check_assigned_patient", "label": "受け持ち患者を1名確認する", "target": "assigned_patient", "completed": false }
+    ],
+    "rewardExp": 5,
+    "status": "planned",
+    "relatedTarget": "bedside_care",
+    "comment": "看護クエストは日単位で再生成・リセットする想定。"
+  },
+  {
+    "questId": "special_001",
+    "type": "特別クエスト",
+    "title": "急変時の初期対応",
+    "description": "期間限定またはイベント連動で発生するクエスト",
+    "difficulty": 3,
+    "steps": [
+      { "stepId": "respond_alarm", "label": "アラーム対象患者を確認する", "target": "monitor_alarm", "completed": false }
+    ],
+    "rewardExp": 30,
+    "status": "planned",
+    "relatedTarget": "scheduled_event",
+    "comment": "特別クエストは時間イベントや患者状態変化から有効化する想定。"
+  },
+  {
+    "questId": "petit_hygiene_001",
+    "type": "プチクエスト",
+    "title": "手指衛生チェックに挑戦",
+    "description": "設備ミニゲームと連動する短時間クエスト",
+    "difficulty": 1,
+    "steps": [
+      { "stepId": "play_hand_hygiene", "label": "手指衛生ミニゲームを確認する", "target": "sink", "completed": false }
+    ],
+    "rewardExp": 3,
+    "status": "planned",
+    "relatedTarget": "hand_hygiene_game",
+    "comment": "プチクエストは設備・ケアのミニゲーム達成時に進行させる想定。"
+  }
+]

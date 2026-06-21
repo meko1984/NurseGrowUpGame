@@ -1,0 +1,10 @@
+{
+  "playerId": "player001",
+  "name": "新人ナース",
+  "level": 1,
+  "exp": 0,
+  "nextLevelExp": 100,
+  "role": "新人ナース",
+  "stamina": 92,
+  "motivation": 80
+}
