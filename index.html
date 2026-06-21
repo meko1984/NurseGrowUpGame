@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4fbff">
+  <title>看護師道場-新人成長物語-</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="status-card">
+      <div class="title-row">
+        <div class="logo" aria-hidden="true">+</div>
+        <div class="title-copy">
+          <p class="eyebrow">UNIT NURSE SIMULATION</p>
+          <h1>看護師道場<span>-新人成長物語-</span></h1>
+        </div>
+        <div class="shift-clock"><small>日勤</small><strong id="game-time">09:00</strong></div>
+      </div>
+      <div class="status-grid">
+        <div class="level-chip"><b>Lv.1</b><span>新人ナース</span></div>
+        <div class="meter"><div><span>体力</span><b>92/100</b></div><i><em style="width:92%"></em></i></div>
+        <div class="meter motivation"><div><span>やる気</span><b>80/100</b></div><i><em style="width:80%"></em></i></div>
+        <div class="exp"><span>EXP</span><i><em style="width:18%"></em></i><b>0/100</b></div>
+      </div>
+    </header>
+
+    <section class="quest-card" aria-labelledby="quest-title">
+      <div class="quest-heading"><span class="quest-icon">★</span><div><p>TRAINING QUEST</p><h2 id="quest-title">病室の基本確認をしよう</h2></div><b id="quest-count">0/3</b></div>
+      <div class="quest-tasks">
+        <span data-quest="bed1">○ Bed1</span><span data-quest="pc">○ PC</span><span data-quest="monitor">○ モニター</span>
+      </div>
+    </section>
+
+    <section class="room-card">
+      <div class="room-heading"><div><span class="online-dot"></span>ユニット病室</div><p>設備をタップして移動</p></div>
+      <div class="room-map" id="room-map" aria-label="ユニット病室マップ">
+        <div class="window"><span></span><span></span><span></span></div>
+        <div class="wall-line"></div>
+
+        <button class="map-object bed bed1" data-target="bed1" style="--x:17%;--y:23%" aria-label="Bed1 肺炎">
+          <span class="bed-tag">Bed1</span><span class="patient patient-blue">●</span><span class="pillow"></span><span class="blanket"></span><small>肺炎</small>
+        </button>
+        <button class="map-object bed bed2" data-target="bed2" style="--x:65%;--y:23%" aria-label="Bed2 心不全">
+          <span class="bed-tag">Bed2</span><span class="patient patient-pink">●</span><span class="pillow"></span><span class="blanket"></span><small>心不全</small>
+        </button>
+        <button class="map-object bed bed3" data-target="bed3" style="--x:17%;--y:55%" aria-label="Bed3 消化管出血">
+          <span class="bed-tag">Bed3</span><span class="patient patient-green">●</span><span class="pillow"></span><span class="blanket"></span><small>消化管出血</small>
+        </button>
+        <button class="map-object bed empty bed4" data-target="bed4" style="--x:65%;--y:55%" aria-label="Bed4 空床">
+          <span class="bed-tag">Bed4</span><span class="pillow"></span><span class="blanket"></span><small>空床</small>
+        </button>
+
+        <button class="map-object equipment pc" data-target="pc" style="--x:18%;--y:84%"><span class="screen">▤</span><small>スタッフPC</small></button>
+        <button class="map-object equipment monitor" data-target="monitor" style="--x:43%;--y:84%"><span class="screen vital-wave">⌁</span><small>モニター</small><i>2</i></button>
+        <button class="map-object equipment mixing" data-target="mixing" style="--x:69%;--y:84%"><span>♙</span><small>ミキシング</small></button>
+        <button class="map-object equipment sink" data-target="sink" style="--x:89%;--y:15%"><span>≈</span><small>手洗い</small></button>
+        <button class="map-object equipment shelf" data-target="shelf" style="--x:89%;--y:45%"><span>▦</span><small>日用品棚</small></button>
+        <button class="map-object equipment trash" data-target="trash" style="--x:89%;--y:72%"><span>♲</span><small>ゴミ箱</small></button>
+
+        <div class="nurse" id="nurse" style="--nurse-x:50%;--nurse-y:68%" aria-label="プレイヤー">
+          <span class="nurse-cap">+</span><span class="nurse-head"></span><span class="nurse-body"></span><b>YOU</b>
+        </div>
+      </div>
+      <p class="map-hint"><span>タップ</span> ベッドや設備を選んで確認しよう</p>
+    </section>
+
+    <footer class="disclaimer">このゲームは看護判断の学習を目的としたフィクションです。実際の医療行為・判断は、所属施設の手順、医師の指示、最新のガイドラインに従ってください。</footer>
+  </main>
+
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <section class="bottom-sheet" id="bottom-sheet" aria-live="polite" aria-modal="true" role="dialog" hidden>
+    <div class="sheet-handle"></div>
+    <button class="close-button" id="close-sheet" aria-label="閉じる">×</button>
+    <div id="sheet-content"></div>
+  </section>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="script.js"></script>
+</body>
+</html>
