@@ -14,6 +14,7 @@
     "plannedStayDays": 10,
     "deliriumHistory": false,
     "status": "酸素投与中。呼吸状態に注意。",
+    "oxygenTherapy": { "device": "鼻腔カニュラ", "flowLpm": 2 },
     "care": ["酸素チューブ位置確認", "呼吸状態観察", "口腔ケア"],
     "medicalOrder": "酸素2L継続、SpO₂低下時報告",
     "handover": "呼吸状態に注意",

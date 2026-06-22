@@ -3,8 +3,10 @@
   "name": "新人ナース",
   "level": 1,
   "exp": 0,
-  "nextLevelExp": 100,
+  "nextLevelExp": 30,
   "role": "新人ナース",
   "stamina": 92,
-  "motivation": 80
+  "motivation": 80,
+  "completedQuestIds": [],
+  "activeQuestIds": []
 }

@@ -20,6 +20,32 @@ const labReferences = {
   Ca: { min: 8.8, max: 10.1, unit: "mg/dL" }
 };
 
+const QUEST_TYPES = ["昇段試験", "看護クエスト", "特別クエスト", "プチクエスト"];
+const QUEST_STORAGE_KEY = "nurseDojoQuestProgressV1";
+
+// All planned actionIds live in one registry. Adding a working action later
+// only requires an implementation here and a button/entry point in the UI.
+const questActions = {
+  check_rr: { label: "RRを確認する", implemented: true, result: patient => `RRは${patient.monitor.RR.display}回/分。やや多い。` },
+  check_spo2: { label: "SpO₂を確認する", implemented: true, result: patient => `SpO₂は${patient.monitor.SpO2.display}。酸素${patient.oxygenTherapy?.flowLpm || 2}L投与中。` },
+  check_hr: { label: "HRを確認する", implemented: false },
+  check_bp: { label: "NIBPを確認する", implemented: false },
+  check_bodytemperature: { label: "体温を確認する", implemented: false },
+  check_o2_route: { label: "酸素ルートを確認する", implemented: false },
+  check_work_of_breathing: { label: "努力呼吸を見る", implemented: false },
+  check_speaking: { label: "会話可能か確認する", implemented: false },
+  check_lung_sound: { label: "肺音を確認する", implemented: false },
+  check_sputum: { label: "痰の性状を確認する", implemented: false },
+  check_consciousness: { label: "意識レベルを確認する", implemented: false },
+  check_skin: { label: "顔色・冷汗を見る", implemented: false },
+  open_chart: { label: "カルテを開く", implemented: false },
+  check_labo_data: { label: "検査値を見る", implemented: false },
+  check_orders: { label: "指示を確認する", implemented: false },
+  consult_senior: { label: "先輩へ相談する", implemented: false },
+  report_sbar: { label: "SBARで報告する", implemented: false },
+  prioritize_bed1: { label: "Bed1を優先する", implemented: false }
+};
+
 // Equipment-specific content stays data-like so a real mini-game can replace
 // each placeholder without changing the map interaction flow.
 const miniGameDefinitions = {
@@ -50,6 +76,7 @@ let patients = {};
 let playerState;
 let questState = [];
 let eventState = [];
+let lastCompletedQuestId = null;
 let minutes = 9 * 60;
 let toastTimer;
 const nurse = document.querySelector("#nurse");
@@ -63,6 +90,20 @@ async function loadJson(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`${path}: ${response.status}`);
   return response.json();
+}
+
+function validateQuestData(quests) {
+  const questIds = new Set(quests.map(quest => quest.questId));
+  if (questIds.size !== quests.length) throw new Error("Duplicate questId found");
+  quests.forEach(quest => {
+    if (!QUEST_TYPES.includes(quest.questType)) throw new Error(`Unknown questType: ${quest.questType}`);
+    quest.requiredActions.forEach(actionId => {
+      if (!questActions[actionId]) throw new Error(`Unknown actionId: ${actionId}`);
+    });
+    quest.coversQuestIds.forEach(questId => {
+      if (!questIds.has(questId)) throw new Error(`Unknown coversQuestId: ${questId}`);
+    });
+  });
 }
 
 function calculateBmi(heightCm, weightKg) {
@@ -117,15 +158,90 @@ async function loadDataStore() {
   const keys = Object.keys(DATA_FILES);
   const values = await Promise.all(keys.map(key => loadJson(DATA_FILES[key])));
   dataStore = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
+  validateQuestData(dataStore.quests);
   dataStore.careById = new Map(dataStore.careMaster.map(row => [row.careId, row]));
   dataStore.carePlanByPatientId = new Map(dataStore.patientCarePlans.map(row => [row.patientId, row]));
-  playerState = { ...dataStore.player };
+  playerState = {
+    ...dataStore.player,
+    completedQuestIds: [...dataStore.player.completedQuestIds],
+    activeQuestIds: [...dataStore.player.activeQuestIds]
+  };
   questState = dataStore.quests.map(quest => ({
     ...quest,
-    steps: quest.steps.map(step => ({ ...step }))
+    requiredActions: [...quest.requiredActions],
+    coversQuestIds: [...quest.coversQuestIds],
+    completedActions: []
   }));
   eventState = dataStore.events.map(event => ({ ...event }));
+  restoreQuestProgress();
+  synchronizeQuestStatuses();
+  activateFirstAvailableQuest();
   buildActivePatients();
+}
+
+function restoreQuestProgress() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(QUEST_STORAGE_KEY));
+    if (!saved?.player) return;
+    playerState = {
+      ...playerState,
+      ...saved.player,
+      completedQuestIds: Array.isArray(saved.player.completedQuestIds) ? saved.player.completedQuestIds : [],
+      activeQuestIds: Array.isArray(saved.player.activeQuestIds) ? saved.player.activeQuestIds : []
+    };
+    const progressByQuestId = new Map((saved.questProgress || []).map(item => [item.questId, item]));
+    questState.forEach(quest => {
+      const progress = progressByQuestId.get(quest.questId);
+      quest.completedActions = progress?.completedActions?.filter(actionId => quest.requiredActions.includes(actionId)) || [];
+    });
+  } catch (error) {
+    console.warn("Saved quest progress could not be restored", error);
+  }
+}
+
+function saveQuestProgress() {
+  try {
+    window.localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify({
+      player: playerState,
+      questProgress: questState.map(quest => ({ questId: quest.questId, completedActions: quest.completedActions }))
+    }));
+  } catch (error) {
+    console.warn("Quest progress could not be saved", error);
+  }
+}
+
+function synchronizeQuestStatuses() {
+  const knownIds = new Set(questState.map(quest => quest.questId));
+  playerState.completedQuestIds = [...new Set(playerState.completedQuestIds)].filter(id => knownIds.has(id));
+  playerState.activeQuestIds = [...new Set(playerState.activeQuestIds)]
+    .filter(id => {
+      const quest = questState.find(item => item.questId === id);
+      return quest && playerState.level >= quest.requiredPlayerLevel && !playerState.completedQuestIds.includes(id);
+    });
+  questState.forEach(quest => {
+    if (playerState.completedQuestIds.includes(quest.questId)) quest.status = "completed";
+    else if (playerState.activeQuestIds.includes(quest.questId)) quest.status = "active";
+    else quest.status = playerState.level >= quest.requiredPlayerLevel ? "available" : "locked";
+  });
+}
+
+function activateQuest(questId, announce = true) {
+  synchronizeQuestStatuses();
+  const quest = questState.find(item => item.questId === questId);
+  if (!quest || quest.status !== "available") return false;
+  if (!playerState.activeQuestIds.includes(questId)) playerState.activeQuestIds.push(questId);
+  synchronizeQuestStatuses();
+  saveQuestProgress();
+  renderActiveQuest();
+  if (announce) showToast(`クエスト受注：${quest.title}`);
+  return true;
+}
+
+function activateFirstAvailableQuest() {
+  synchronizeQuestStatuses();
+  if (playerState.activeQuestIds.length) return;
+  const nextQuest = questState.find(quest => quest.status === "available");
+  if (nextQuest) activateQuest(nextQuest.questId, false);
 }
 
 function advanceTime() {
@@ -146,13 +262,21 @@ function renderPlayerStatus() {
   document.querySelector("#experience-meter").style.width = `${Math.min((playerState.exp / playerState.nextLevelExp) * 100, 100)}%`;
 }
 
+function nextLevelRequirement(level) {
+  if (level === 1) return 30;
+  if (level === 2) return 60;
+  if (level === 3) return 100;
+  if (level === 4) return 150;
+  return level * 40;
+}
+
 function grantExperience(amount) {
   playerState.exp += amount;
   const levelUpMessages = [];
   while (playerState.exp >= playerState.nextLevelExp) {
     playerState.exp -= playerState.nextLevelExp;
     playerState.level += 1;
-    playerState.nextLevelExp = Math.round(playerState.nextLevelExp * 1.25);
+    playerState.nextLevelExp = nextLevelRequirement(playerState.level);
     levelUpMessages.push(`レベルアップ！ Lv.${playerState.level}になりました`);
   }
   renderPlayerStatus();
@@ -287,7 +411,25 @@ function careMarkup(patient) {
 function patientView(patientId) {
   const patient = patients[patientId];
   const vitals = patient.monitor ? `<div class="vitals-grid">${coreMonitorFields.map(field => `<div class="vital-card"><span>${monitorLabels[field]}</span><b>${patient.monitor[field].display}</b></div>`).join("")}</div>` : "";
-  return `${sheetHeader("PATIENT INFORMATION", `${patient.bed} <small>｜${patient.diagnosis}</small>`)}<p class="info-status">${patient.status}</p>${vitals}<div class="action-list"><button class="action-button" data-message="状態観察機能は今後実装予定です">状態を観察</button><button class="action-button" data-bed-care="${patientId}">ケアを確認</button></div>`;
+  const observationButton = patient.patientId === "p001"
+    ? `<button class="action-button is-primary" data-observation-menu="${patientId}">観察</button>`
+    : `<button class="action-button" data-message="この患者の観察アクションは今後実装予定です">観察</button>`;
+  return `${sheetHeader("PATIENT INFORMATION", `${patient.bed} <small>｜${patient.diagnosis}</small>`)}<p class="info-status">${patient.status}</p>${vitals}<div class="action-list">${observationButton}<button class="action-button" data-bed-care="${patientId}">ケアを確認</button></div>`;
+}
+
+function observationView(patientId, lastResult = "") {
+  const patient = patients[patientId];
+  const quest = questState.find(item => item.status === "active" && item.targetPatientId === patient.patientId);
+  const actions = ["check_rr", "check_spo2"];
+  const buttons = actions.map(actionId => {
+    const action = questActions[actionId];
+    const completed = quest?.completedActions.includes(actionId);
+    const required = quest?.requiredActions.includes(actionId);
+    return `<button class="observation-button ${completed ? "is-complete" : ""}" data-observation-action="${actionId}" data-patient-bed="${patientId}"><span>${completed ? "✓" : "○"} ${action.label}</span><small>${required ? "進行中クエストの対象" : "観察可能"}</small></button>`;
+  }).join("");
+  const progress = quest ? `<div class="observation-quest"><b>進行中：${quest.title}</b><span>${quest.completedActions.length}/${quest.requiredActions.length}</span></div>` : `<p class="info-status">この患者で進行中のクエストはありません。</p>`;
+  const result = lastResult ? `<p class="observation-result">${lastResult}</p>` : "";
+  return `${sheetHeader("BEDSIDE OBSERVATION", `${patient.bed}｜観察`)}<button class="back-button" data-bed-back="${patientId}">← 患者情報へ</button><div class="patient-summary"><div><strong>${patient.name}</strong><span>${patient.diagnosis}｜酸素${patient.oxygenTherapy?.flowLpm || 2}L投与中</span></div></div>${progress}${result}<div class="observation-list">${buttons}</div>`;
 }
 
 function bedCareView(patientId) {
@@ -408,31 +550,84 @@ function activeQuest() {
 
 function renderActiveQuest() {
   const quest = activeQuest();
-  if (!quest) return;
-  const completed = quest.steps.filter(step => step.completed).length;
-  document.querySelector("#quest-title").textContent = quest.title;
-  document.querySelector("#quest-count").textContent = `${completed}/${quest.steps.length}`;
-  document.querySelector(".quest-tasks").innerHTML = quest.steps.map(step => `<span class="${step.completed ? "done" : ""}" data-quest="${step.target}">${step.completed ? "✓" : "○"} ${step.label.replace("を確認する", "")}</span>`).join("");
+  const title = document.querySelector("#quest-title");
+  const count = document.querySelector("#quest-count");
+  const tasks = document.querySelector(".quest-tasks");
+  const kicker = document.querySelector(".quest-heading p");
+  if (quest) {
+    title.textContent = quest.title;
+    count.textContent = `${quest.completedActions.length}/${quest.requiredActions.length}`;
+    kicker.textContent = `${quest.questType}｜Lv.${quest.questLevel}`;
+    tasks.innerHTML = quest.requiredActions.map(actionId => {
+      const done = quest.completedActions.includes(actionId);
+      return `<span class="${done ? "done" : ""}">${done ? "✓" : "○"} ${questActions[actionId]?.label || actionId}</span>`;
+    }).join("");
+    return;
+  }
+  const nextLocked = questState.find(item => item.status === "locked");
+  const completed = questState.find(item => item.questId === lastCompletedQuestId) || questState.filter(item => item.status === "completed").slice(-1)[0];
+  kicker.textContent = "QUEST STATUS";
+  title.textContent = nextLocked ? `次はLv.${nextLocked.requiredPlayerLevel}で解放` : "進行中のクエストはありません";
+  count.textContent = "--";
+  tasks.innerHTML = `<span class="${completed ? "done" : ""}">${completed ? `✓ ${completed.title}` : "クエスト一覧を確認しよう"}</span>`;
 }
 
-function updateQuest(target) {
-  const quest = activeQuest();
-  if (!quest) return;
-  const step = quest.steps.find(item => item.target === target && !item.completed);
-  if (!step) return;
-  step.completed = true;
+function questListView() {
+  synchronizeQuestStatuses();
+  const statusMeta = {
+    available: ["受注可能", "AVAILABLE"], active: ["進行中", "ACTIVE"],
+    completed: ["達成済み", "COMPLETED"], locked: ["未解放", "LOCKED"]
+  };
+  const sections = ["active", "available", "completed", "locked"].map(status => {
+    const quests = questState.filter(quest => quest.status === status);
+    const cards = quests.length ? quests.map(quest => {
+      const progress = quest.completedActions.length;
+      const actionTotal = quest.requiredActions.length;
+      const action = status === "available" ? `<button data-accept-quest="${quest.questId}">受注する</button>` : "";
+      return `<article class="quest-list-card is-${status}"><div><span>${quest.questType}｜QUEST Lv.${quest.questLevel}</span><b>${quest.title}</b></div><p>${quest.description}</p><small>${status === "locked" ? `プレイヤーLv.${quest.requiredPlayerLevel}で解放` : `進捗 ${progress}/${actionTotal}｜EXP +${quest.rewardExp}`}</small>${action}</article>`;
+    }).join("") : `<p class="quest-empty">該当するクエストはありません</p>`;
+    return `<section class="quest-status-section"><h3>${statusMeta[status][0]} <small>${statusMeta[status][1]}</small><b>${quests.length}</b></h3>${cards}</section>`;
+  }).join("");
+  return `${sheetHeader("QUEST BOARD", "肺炎患者クエストツリー")}<div class="quest-player-summary"><b>Lv.${playerState.level} ${playerState.name}</b><span>EXP ${playerState.exp}/${playerState.nextLevelExp}</span><small>次のレベルまで ${Math.max(playerState.nextLevelExp - playerState.exp, 0)} EXP</small></div>${sections}`;
+}
+
+function completeQuest(quest) {
+  quest.status = "completed";
+  lastCompletedQuestId = quest.questId;
+  if (!playerState.completedQuestIds.includes(quest.questId)) playerState.completedQuestIds.push(quest.questId);
+  playerState.activeQuestIds = playerState.activeQuestIds.filter(id => id !== quest.questId);
+  const levelUps = grantExperience(quest.rewardExp);
+  synchronizeQuestStatuses();
+  activateFirstAvailableQuest();
+  saveQuestProgress();
   renderActiveQuest();
-  if (quest.steps.every(item => item.completed)) {
-    quest.status = "completed";
-    const levelUps = grantExperience(quest.rewardExp);
-    showToast(`クエスト達成：${quest.title}\n経験値 +${quest.rewardExp}${levelUps.length ? `\n${levelUps.join("\n")}` : ""}`, true);
-  }
+  return `クエスト達成：${quest.title}\n経験値 +${quest.rewardExp}${levelUps.length ? `\n${levelUps.join("\n")}` : ""}`;
+}
+
+function recordQuestAction(actionId, patientId) {
+  let completionMessage = "";
+  questState.filter(quest => quest.status === "active" && quest.targetPatientId === patientId && quest.requiredActions.includes(actionId)).forEach(quest => {
+    if (!quest.completedActions.includes(actionId)) quest.completedActions.push(actionId);
+    if (quest.requiredActions.every(requiredAction => quest.completedActions.includes(requiredAction))) completionMessage = completeQuest(quest);
+  });
+  saveQuestProgress();
+  renderActiveQuest();
+  return completionMessage;
+}
+
+function performObservation(patientId, actionId) {
+  const patient = patients[patientId];
+  const action = questActions[actionId];
+  if (!patient || !action?.implemented) return { result: "この観察は今後実装予定です。", completionMessage: "" };
+  advanceTime();
+  const result = action.result(patient);
+  const completionMessage = recordQuestAction(actionId, patient.patientId);
+  return { result, completionMessage };
 }
 
 function interact(target) {
   moveNurse(target);
   advanceTime();
-  updateQuest(target);
   window.setTimeout(() => {
     if (patients[target]) openSheet(patientView(target));
     else if (target === "pc") openSheet(pcPatientListView());
@@ -443,6 +638,7 @@ function interact(target) {
 
 function bindInteractions() {
   document.querySelectorAll(".map-target").forEach(target => target.addEventListener("click", () => interact(target.dataset.target)));
+  document.querySelector("#open-quest-list").addEventListener("click", () => openSheet(questListView()));
   document.querySelector("#close-sheet").addEventListener("click", closeSheet);
   backdrop.addEventListener("click", closeSheet);
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !sheet.hidden) closeSheet(); });
@@ -452,6 +648,9 @@ function bindInteractions() {
     const pcBackButton = event.target.closest("[data-pc-back]");
     const bedCareButton = event.target.closest("[data-bed-care]");
     const bedBackButton = event.target.closest("[data-bed-back]");
+    const observationMenu = event.target.closest("[data-observation-menu]");
+    const observationAction = event.target.closest("[data-observation-action]");
+    const acceptQuestButton = event.target.closest("[data-accept-quest]");
     const alarm = event.target.closest("[data-alarm-patient]");
     const moveOnly = event.target.closest("[data-move-only]");
     const messageButton = event.target.closest("[data-message]");
@@ -460,6 +659,17 @@ function bindInteractions() {
     else if (pcBackButton) sheetContent.innerHTML = pcBackButton.dataset.pcBack === "list" ? pcPatientListView() : pcPatientMenuView(pcBackButton.dataset.patient);
     else if (bedCareButton) sheetContent.innerHTML = bedCareView(bedCareButton.dataset.bedCare);
     else if (bedBackButton) sheetContent.innerHTML = patientView(bedBackButton.dataset.bedBack);
+    else if (observationMenu) sheetContent.innerHTML = observationView(observationMenu.dataset.observationMenu);
+    else if (observationAction) {
+      const outcome = performObservation(observationAction.dataset.patientBed, observationAction.dataset.observationAction);
+      sheetContent.innerHTML = observationView(observationAction.dataset.patientBed, outcome.result);
+      showToast(outcome.completionMessage || outcome.result, Boolean(outcome.completionMessage));
+    }
+    else if (acceptQuestButton) {
+      const accepted = activateQuest(acceptQuestButton.dataset.acceptQuest);
+      sheetContent.innerHTML = questListView();
+      if (!accepted) showToast("このクエストは現在受注できません。");
+    }
     else if (alarm) showAlarmDetail(alarm.dataset.alarmPatient, alarm.dataset.alarmField);
     else if (moveOnly) { moveNurse(moveOnly.dataset.moveOnly); closeSheet(); showToast(`${patients[moveOnly.dataset.moveOnly].bed}付近へ移動しました`); }
     else if (messageButton) showToast(messageButton.dataset.message);
